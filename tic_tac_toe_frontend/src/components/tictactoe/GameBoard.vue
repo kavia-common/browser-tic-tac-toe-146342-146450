@@ -1,8 +1,59 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, defineComponent } from 'vue'
 
 type Player = 'X' | 'O'
 type Cell = Player | ''
+
+// Register local icon components (avoid JSX)
+const KnightIcon = defineComponent({
+  name: 'KnightIcon',
+  props: {
+    size: { type: Number, default: 36 },
+    color: { type: String, default: 'var(--ocean-primary)' },
+    class: { type: String, default: '' },
+  },
+  template: `
+    <svg
+      :width="size" :height="size" viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none" :stroke="color" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+      :class="class" aria-hidden="true" focusable="false"
+    >
+      <path d="M8 17h8" />
+      <path d="M6 19h12" />
+      <path d="M9 7c0-.9.4-1.7 1.1-2.3.6-.5 1.4-.7 2.2-.7 1.2 0 2.3.6 3 1.6l2.2 3.2c.3.5.5 1 .5 1.6v6.6H8v-3.2c0-1.1.6-2.1 1.6-2.6l1.6-.8c-1-.6-1.6-1.7-1.6-2.8z"/>
+      <path d="M12.2 5.8l-1.4 1.2" />
+      <circle cx="13.2" cy="7.6" r="0.6" :fill="color" stroke="none" />
+    </svg>
+  `,
+})
+
+const QueenIcon = defineComponent({
+  name: 'QueenIcon',
+  props: {
+    size: { type: Number, default: 36 },
+    color: { type: String, default: 'var(--ocean-secondary)' },
+    class: { type: String, default: '' },
+  },
+  template: `
+    <svg
+      :width="size" :height="size" viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none" :stroke="color" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+      :class="class" aria-hidden="true" focusable="false"
+    >
+      <path d="M6 19h12" />
+      <path d="M8 17h8" />
+      <path d="M7 17c1.8-3.2 2.9-6.5 5-10 2.1 3.5 3.2 6.8 5 10H7z" />
+      <circle cx="12" cy="4" r="1" :fill="color" stroke="none"/>
+      <circle cx="8" cy="6" r="1" :fill="color" stroke="none"/>
+      <circle cx="16" cy="6" r="1" :fill="color" stroke="none"/>
+    </svg>
+  `,
+})
+
+// expose for template (prevents unused-var linting)
+defineExpose({ KnightIcon, QueenIcon })
 
 // PUBLIC_INTERFACE
 function calculateWinner(squares: Cell[]): { winner: Player | null; line: number[] } {
@@ -44,6 +95,14 @@ const state = reactive({
 })
 
 const currentPlayer = computed<Player>(() => (state.xIsNext ? 'X' : 'O'))
+
+// eslint usage keepers (no-op references to avoid unused false positives in SFC + template context)
+void calculateWinner
+void isBoardFull
+void currentPlayer
+
+// Define local icon components (template-based) to avoid JSX in TS
+</script>
 
 const result = computed(() => {
   const res = calculateWinner(state.board)
@@ -117,14 +176,27 @@ function isWinningCell(idx: number) {
   return state.winningLine.includes(idx)
 }
 
-const hoverIndex = ref<number | null>(null)
+
+
+// helpers to render the right icon by player
+function iconFor(player: Player, size = 36, solid = true) {
+  if (player === 'X') {
+    return KnightIcon({ size, color: 'var(--ocean-primary)' })
+  }
+  return QueenIcon({ size, color: 'var(--ocean-secondary)' })
+}
 </script>
 
 <template>
   <section class="card">
     <div class="scoreboard">
       <div class="score score-x" :class="{ active: !state.gameOver && currentPlayer === 'X' }">
-        <div class="label">Player X</div>
+        <div class="label score-label">
+          <span class="icon-wrap" aria-hidden="true">
+            <KnightIcon :size="18" class="icon-label knight" />
+          </span>
+          Player X
+        </div>
         <div class="value">{{ state.scores.X }}</div>
       </div>
       <div class="score score-draw">
@@ -132,7 +204,12 @@ const hoverIndex = ref<number | null>(null)
         <div class="value">{{ state.scores.draws }}</div>
       </div>
       <div class="score score-o" :class="{ active: !state.gameOver && currentPlayer === 'O' }">
-        <div class="label">Player O</div>
+        <div class="label score-label">
+          <span class="icon-wrap" aria-hidden="true">
+            <QueenIcon :size="18" class="icon-label queen" />
+          </span>
+          Player O
+        </div>
         <div class="value">{{ state.scores.O }}</div>
       </div>
     </div>
@@ -140,6 +217,19 @@ const hoverIndex = ref<number | null>(null)
     <div class="status-row">
       <div class="chip" :data-accent="statusAccent">
         <span class="dot"></span>
+        <span class="status-icon" aria-hidden="true">
+          <KnightIcon
+            v-if="result.status !== 'draw' && currentPlayer === 'X'"
+            :size="18"
+            class="icon-label knight"
+          />
+          <QueenIcon
+            v-if="result.status !== 'draw' && currentPlayer === 'O'"
+            :size="18"
+            class="icon-label queen"
+          />
+        </span>
+        </span>
         {{ statusText }}
       </div>
 
@@ -163,16 +253,24 @@ const hoverIndex = ref<number | null>(null)
         :key="idx"
         class="cell"
         role="gridcell"
-        :aria-label="cell ? ('Cell ' + (idx + 1) + ' ' + cell) : ('Cell ' + (idx + 1) + ' empty')"
+        :aria-label="cell ? ('Cell ' + (idx + 1) + ' ' + (cell === 'X' ? 'Knight' : 'Queen')) : ('Cell ' + (idx + 1) + ' empty')"
         :data-player="cell || undefined"
         :data-hover="(!cell && !state.gameOver) ? currentPlayer : undefined"
         :class="{ win: isWinningCell(idx), disabled: !!cell || state.gameOver }"
         @click="handleCellClick(idx)"
-        @mouseenter="hoverIndex = idx"
-        @mouseleave="hoverIndex = null"
+
       >
         <span class="mark" :class="{ show: !!cell }">
-          {{ cell }}
+          <KnightIcon
+            v-if="cell === 'X'"
+            :size="40"
+            class="icon-board knight"
+          />
+          <QueenIcon
+            v-else-if="cell === 'O'"
+            :size="40"
+            class="icon-board queen"
+          />
         </span>
       </button>
     </div>
@@ -301,6 +399,12 @@ const hoverIndex = ref<number | null>(null)
   box-shadow: 0 0 0 4px rgba(107,114,128,0.18);
 }
 
+.status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .actions {
   display: flex;
   gap: 0.5rem;
@@ -371,7 +475,7 @@ const hoverIndex = ref<number | null>(null)
   border: 1px solid var(--ocean-border);
   display: grid;
   place-items: center;
-  font-size: 2.4rem;
+  font-size: 2.4rem; /* retained for spacing harmony */
   font-weight: 800;
   color: var(--ocean-text);
   cursor: pointer;
@@ -391,17 +495,27 @@ const hoverIndex = ref<number | null>(null)
   transform: translateY(0);
 }
 
+/* Replace hover text with faint icons */
 .cell[data-hover="X"]::after,
 .cell[data-hover="O"]::after {
-  content: attr(data-hover);
+  content: '';
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  color: rgba(31,41,55,0.12);
-  font-size: 2rem;
-  font-weight: 900;
+  opacity: 0.16;
   pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 42%;
+}
+
+/* Lightweight data-URI SVGs for hover previews */
+.cell[data-hover="X"]::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 24 24' fill='none' stroke='%23111827' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 17h8'/%3E%3Cpath d='M6 19h12'/%3E%3Cpath d='M9 7c0-.9.4-1.7 1.1-2.3.6-.5 1.4-.7 2.2-.7 1.2 0 2.3.6 3 1.6l2.2 3.2c.3.5.5 1 .5 1.6v6.6H8v-3.2c0-1.1.6-2.1 1.6-2.6l1.6-.8c-1-.6-1.6-1.7-1.6-2.8z'/%3E%3C/svg%3E");
+}
+.cell[data-hover="O"]::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 24 24' fill='none' stroke='%23111827' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 19h12'/%3E%3Cpath d='M8 17h8'/%3E%3Cpath d='M7 17c1.8-3.2 2.9-6.5 5-10 2.1 3.5 3.2 6.8 5 10H7z'/%3E%3C/svg%3E");
 }
 
 .cell[data-player="X"] {
@@ -425,10 +539,30 @@ const hoverIndex = ref<number | null>(null)
   opacity: 0;
   transform: scale(0.9);
   transition: opacity .18s ease, transform .18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .mark.show {
   opacity: 1;
   transform: scale(1);
+}
+
+/* Icon coloring helpers */
+.icon-board.knight :deep(path), .icon-label.knight :deep(path) {
+  stroke: var(--ocean-primary);
+}
+.icon-board.queen :deep(path), .icon-label.queen :deep(path) {
+  stroke: var(--ocean-secondary);
+}
+
+.icon-label {
+  display: inline-flex;
+  vertical-align: middle;
+}
+.icon-wrap {
+  display: inline-flex;
+  margin-right: 6px;
 }
 
 @media (max-width: 520px) {
